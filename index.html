@@ -1,8 +1,388 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CAGE Distance Framework</title><style>body{font:16px system-ui;margin:0;background:#f5f7fa;color:#172334}main{max-width:960px;margin:auto;padding:30px}section{background:white;border:1px solid #dce2e8;border-radius:12px;padding:20px;margin:16px 0}label{display:block;font-weight:650;margin:12px 0 5px}select,input{width:100%;padding:10px;box-sizing:border-box}button{background:#154c78;color:white;border:0;border-radius:8px;padding:12px 18px;cursor:pointer}small,.muted{color:#526171}table{width:100%;border-collapse:collapse}td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}a{color:#115d99}h1{margin-bottom:4px}.pill{padding:4px 9px;border-radius:30px;background:#eaf2fb}input[type=range]{padding:0} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}</style></head><body><main><h1>CAGE Distance Framework</h1><p class="muted">Evidence-backed, illustrative country-pair assessment. Distance scores are decision aids, not forecasts.</p><section><div class="grid"><div><label for="home">Home country</label><select id="home"><option value="US">United States</option><option value="JP">Japan</option></select></div><div><label for="target">Target country</label><select id="target"><option value="JP">Japan</option><option value="US">United States</option></select></div><div><label for="industry">Industry</label><select id="industry"><option value="consumer">Consumer products</option><option value="media">Media and entertainment</option><option value="cement">Cement and construction materials</option></select></div></div><p><button id="run">Analyze countries</button></p><small>Current data coverage: United States ↔ Japan only. Other pairs are deliberately not simulated.</small></section><section id="results" aria-live="polite"></section><section><h2>Method and limitations</h2><p>Each dimension receives a judgment-based 0–10 distance rating (0 = low friction; 10 = high friction). Weights reflect industry exposure, sum to 100%, and are editable. The weighted average is a screening heuristic, not a validated prediction of expansion success. Ratings are provisional and should be independently checked before investment decisions.</p><p>Scores use cited country-level reference sources. They do not account for firm capabilities, current tariffs, product regulations, or a specific distribution channel. Dates and quantitative values should be checked against current releases.</p></section></main><script>
-const sources={culture:[['Hofstede / The Culture Factor country comparison','https://www.theculturefactor.com/country-comparison-tool']],admin:[['Office of the U.S. Trade Representative — Japan','https://ustr.gov/countries-regions/japan-korea-apec/japan'],['WTO regional trade agreements database','https://rtais.wto.org/']],geo:[['CEPII GeoDist database','https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=6'],['World Bank Logistics Performance Index','https://lpi.worldbank.org/']],econ:[['World Bank GDP per capita (current US$)','https://data.worldbank.org/indicator/NY.GDP.PCAP.CD?locations=US-JP']]};
-const dimensions=[{name:'Cultural',key:'culture',score:7,reason:'English and Japanese are distinct languages, and cross-cultural communication norms differ. The cultural rating is an analyst judgment; Hofstede-style indices are imperfect national averages.'},{name:'Administrative',key:'admin',score:3,reason:'The countries have established diplomatic and commercial ties, but no comprehensive bilateral free-trade agreement covering all goods. Product-specific rules and trade measures still need verification.'},{name:'Geographic',key:'geo',score:8,reason:'The countries are separated by the Pacific Ocean and do not share a land border. Ocean or air shipping, transit time, and supply-chain resilience matter for physical goods.'},{name:'Economic',key:'econ',score:4,reason:'Both are high-income economies, but GDP per capita and purchasing patterns differ. National income averages do not establish affordability for a specific customer segment.'}];
-const profiles={consumer:[30,20,20,30],media:[45,25,10,20],cement:[10,20,45,25]};let weights=[...profiles.consumer];const result=document.querySelector('#results');
-function rating(x){return x<3.5?'Relatively low':x<6.5?'Moderate':'High'}
-function render(){let h=document.querySelector('#home').value,t=document.querySelector('#target').value,ind=document.querySelector('#industry').value;if(h===t){result.innerHTML='<h2>Results</h2><p>Choose two different countries.</p>';return}if(!(['US','JP'].includes(h)&&['US','JP'].includes(t))){result.innerHTML='<p>Country pair not supported.</p>';return}const total=weights.reduce((a,b)=>a+b,0),avg=total?dimensions.reduce((a,d,i)=>a+d.score*weights[i],0)/total:0;let base=profiles[ind],baseAvg=dimensions.reduce((a,d,i)=>a+d.score*base[i],0)/100;let highest=dimensions.reduce((a,d,i)=>d.score*weights[i]>dimensions[a].score*weights[a]?i:a,0);result.innerHTML=`<h2>Analysis: ${h==='US'?'United States':'Japan'} → ${t==='US'?'United States':'Japan'}</h2><p><strong>Industry:</strong> ${document.querySelector('#industry').selectedOptions[0].text}. <strong>Weighted distance:</strong> <span class="pill">${avg.toFixed(2)}/10 — ${rating(avg)}</span></p><p><strong>Industry rationale:</strong> ${ind==='media'?'Cultural and regulatory compatibility matter most for localized content.':ind==='cement'?'Freight, distance, and local cost economics matter most for heavy, low-value-to-weight goods.':'Cultural fit and purchasing power matter most for customer-facing products.'}</p><div id="rows">${dimensions.map((d,i)=>`<article><h3>${d.name}: ${d.score}/10</h3><p>${d.reason}</p><p><strong>Country-level references:</strong> ${sources[d.key].map(s=>`<a href="${s[1]}" target="_blank" rel="noopener">${s[0]}</a>`).join(' · ')}</p><label for="w${i}">${d.name} weight: <output id="o${i}">${weights[i]}%</output></label><input id="w${i}" type="range" min="0" max="100" step="5" value="${weights[i]}"></article>`).join('')}</div><p><strong>Weights total:</strong> ${total}% ${total!==100?'(normalized for calculation; set to 100% for a defensible final allocation)':''}</p><p><strong>Recommendation:</strong> ${avg>=6.5?'Proceed only after substantial local-market validation and risk mitigation.':avg>=3.5?'Consider a staged market test before committing major resources.':'Distance alone does not suggest a major obstacle, but validate demand and compliance before entering.'} <strong>Single largest weighted risk:</strong> ${dimensions[highest].name.toLowerCase()} distance.</p><p><strong>Sensitivity:</strong> Default industry weights produce ${baseAvg.toFixed(2)}/10 (${rating(baseAvg)}). Current weights produce ${avg.toFixed(2)}/10 (${rating(avg)}). The recommendation ${rating(baseAvg)===rating(avg)?'stays in the same distance band':'moves to a different distance band'}.</p><button id="reset">Reset industry weights</button><p class="muted">Sources are reference portals, not live feeds. Scores are interpretive and should not be presented as current empirical measurements.</p>`;dimensions.forEach((d,i)=>document.querySelector('#w'+i).addEventListener('input',e=>{weights[i]=+e.target.value;render()}));document.querySelector('#reset').onclick=()=>{weights=[...profiles[ind]];render()}}
-document.querySelector('#run').onclick=()=>{weights=[...profiles[document.querySelector('#industry').value]];render()};render();
-</script></body></html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAGE Distance Framework</title>
+<style>
+body{font:16px system-ui;margin:0;background:#f5f7fa;color:#172334}
+main{max-width:960px;margin:auto;padding:30px}
+section{background:white;border:1px solid #dce2e8;border-radius:12px;padding:20px;margin:16px 0}
+label{display:block;font-weight:650;margin:12px 0 5px}
+select,input{width:100%;padding:10px;box-sizing:border-box}
+button{background:#154c78;color:white;border:0;border-radius:8px;padding:12px 18px;cursor:pointer}
+button:hover{background:#0b3455}
+small,.muted{color:#526171}
+table{width:100%;border-collapse:collapse}
+td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}
+a{color:#115d99}
+h1{margin-bottom:4px}
+.pill{padding:4px 9px;border-radius:30px;background:#eaf2fb}
+input[type=range]{padding:0}
+.report{background:#f9fbff;border:1px solid #cbdbea;border-radius:10px;padding:20px;line-height:1.65}
+.report p{white-space:pre-line;margin:12px 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.notice{font-size:14px;color:#526171}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+article{border-bottom:1px solid #e2e7ed;padding:10px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>CAGE Distance Framework</h1>
+<p class="muted">Evidence-backed illustrative country-pair assessment. Distance scores are decision aids, not forecasts.</p>
+
+<section>
+<div class="grid">
+<div>
+<label for="home">Home country</label>
+<select id="home">
+<option value="US">United States</option>
+<option value="JP">Japan</option>
+</select>
+</div>
+<div>
+<label for="target">Target country</label>
+<select id="target">
+<option value="JP">Japan</option>
+<option value="US">United States</option>
+</select>
+</div>
+<div>
+<label for="industry">Industry</label>
+<select id="industry">
+<option value="consumer">Consumer products</option>
+<option value="media">Media and entertainment</option>
+<option value="cement">Cement and construction materials</option>
+</select>
+</div>
+</div>
+<p><button id="run">Analyze countries</button></p>
+<small>Current coverage: United States and Japan only. Other country pairs are not simulated.</small>
+</section>
+
+<section id="results" aria-live="polite"></section>
+
+<section>
+<h2>Copy-ready CAGE Analysis Report</h2>
+<p class="muted">This report updates automatically with your selected industry and weights. Copy it into Google Docs for your assignment.</p>
+<div class="actions">
+<button id="copyReport">Copy Full Report</button>
+</div>
+<p id="copyStatus" class="notice" role="status"></p>
+<div id="reportText" class="report"></div>
+</section>
+
+<section>
+<h2>Method and limitations</h2>
+<p>Each dimension receives a judgment-based rating from 0 to 10, where 0 represents little friction and 10 represents high friction. Industry-specific weights sum to 100% by default and can be adjusted.</p>
+<p>The weighted average is a screening heuristic, not a validated prediction of expansion success. Ratings are provisional and should be checked against current country data before making investment decisions.</p>
+<p>The tool does not evaluate firm capabilities, product-specific regulations, tariffs, or actual consumer demand.</p>
+</section>
+</main>
+
+<script>
+const sources={
+culture:[
+["The Culture Factor country comparison",
+"https://www.theculturefactor.com/country-comparison-tool"]
+],
+admin:[
+["U.S. Trade Representative — Japan",
+"https://ustr.gov/countries-regions/japan-korea-apec/japan"],
+["WTO trade agreements database",
+"https://rtais.wto.org/"]
+],
+geo:[
+["CEPII GeoDist database",
+"https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=6"],
+["World Bank Logistics Performance Index",
+"https://lpi.worldbank.org/"]
+],
+econ:[
+["World Bank GDP per capita",
+"https://data.worldbank.org/indicator/NY.GDP.PCAP.CD?locations=US-JP"]
+]
+};
+
+const dimensions=[
+{
+name:"Cultural",
+key:"culture",
+score:7,
+reason:"English and Japanese are distinct languages, and cross-cultural communication norms differ. These differences can complicate marketing, product positioning, and customer relationships. The rating is an analyst judgment, not a direct Hofstede measurement."
+},
+{
+name:"Administrative",
+key:"admin",
+score:3,
+reason:"The United States and Japan have established diplomatic and commercial ties. However, there is no comprehensive bilateral free-trade agreement covering all goods. Product-specific regulations and trade measures require additional investigation."
+},
+{
+name:"Geographic",
+key:"geo",
+score:8,
+reason:"The countries are separated by the Pacific Ocean and do not share a land border. International transportation, shipping times, and supply-chain reliability create challenges for businesses distributing physical products."
+},
+{
+name:"Economic",
+key:"econ",
+score:4,
+reason:"Both countries are high-income economies, but GDP per capita, purchasing patterns, and consumer preferences differ. National averages do not establish affordability for a specific customer segment."
+}
+];
+
+const profiles={
+consumer:[30,20,20,30],
+media:[45,25,10,20],
+cement:[10,20,45,25]
+};
+
+let weights=[...profiles.consumer];
+
+const result=document.getElementById("results");
+
+function rating(score){
+if(score<3.5)return "Relatively low";
+if(score<6.5)return "Moderate";
+return "High";
+}
+
+function recommendation(score){
+if(score>=6.5){
+return "Proceed only after substantial local-market validation and risk mitigation.";
+}
+if(score>=3.5){
+return "Conduct a staged market test before committing major resources.";
+}
+return "Country distance alone does not suggest a major obstacle, but validate demand and compliance before entering.";
+}
+
+function industryReason(ind){
+if(ind==="media"){
+return "Cultural and administrative compatibility receive greater weight because media content must be localized and distribution may face regulation.";
+}
+if(ind==="cement"){
+return "Geographic distance receives the greatest weight because heavy construction materials are costly to transport.";
+}
+return "Cultural and economic distance receive the greatest weight because consumer acceptance and purchasing power are central to sales.";
+}
+
+function generateReport(home,target,ind,avg,baseAvg,highest,total){
+const homeName=home==="US"?"United States":"Japan";
+const targetName=target==="US"?"United States":"Japan";
+const industry=document.getElementById("industry").selectedOptions[0].text;
+
+const contributions=dimensions.map((d,i)=>({
+...d,
+weight:weights[i],
+points:total?d.score*weights[i]/total:0
+}));
+
+const risk=contributions[highest];
+
+const lines=[
+"CAGE DISTANCE ANALYSIS REPORT",
+"",
+"Country pair: "+homeName+" to "+targetName,
+"Industry: "+industry,
+"",
+"EXECUTIVE SUMMARY",
+"",
+"The "+homeName+" to "+targetName+" comparison receives an illustrative weighted CAGE distance score of "+avg.toFixed(2)+"/10, indicating "+rating(avg).toLowerCase()+" distance for the "+industry.toLowerCase()+" industry. This assessment considers cultural, administrative, geographic, and economic differences between the two countries.",
+"",
+"The scores represent analyst judgments informed by country-level reference sources rather than measured probabilities of business success.",
+"",
+"INDUSTRY WEIGHTING AND METHODOLOGY",
+"",
+industryReason(ind),
+"",
+"The default weights are: "+dimensions.map((d,i)=>d.name+" "+profiles[ind][i]+"%").join(", ")+".",
+"",
+"The current weights are: "+dimensions.map((d,i)=>d.name+" "+weights[i]+"%").join(", ")+".",
+"",
+"Each dimension receives a distance score from 0 to 10. The overall score is calculated by multiplying each dimension's rating by its weight and summing the contributions.",
+"",
+"FOUR CAGE DIMENSIONS",
+""
+];
+
+contributions.forEach(d=>{
+lines.push(
+d.name.toUpperCase()+" DISTANCE",
+"",
+"Distance score: "+d.score+"/10",
+"Industry weight: "+d.weight+"%",
+"Weighted contribution: "+d.points.toFixed(2)+" points",
+"",
+"Analysis: "+d.reason,
+"",
+"Country-level references:",
+...sources[d.key].map(s=>s[0]+": "+s[1]),
+""
+);
+});
+
+lines.push(
+"RECOMMENDATION",
+"",
+recommendation(avg),
+"",
+"The firm should validate the most important barriers through local market research, consumer testing, and regulatory due diligence before making a major investment.",
+"",
+"SINGLE LARGEST RISK",
+"",
+"The largest weighted distance contribution is "+risk.name.toLowerCase()+" distance, contributing "+risk.points.toFixed(2)+" points to the overall score.",
+"",
+"Leadership should prioritize investigating this risk before committing substantial resources. The ranking reflects the current industry weights rather than a quantified financial loss.",
+"",
+"WEIGHT SENSITIVITY ANALYSIS",
+"",
+"Under the default industry weights, the overall CAGE score is "+baseAvg.toFixed(2)+"/10 ("+rating(baseAvg).toLowerCase()+" distance).",
+"",
+"Under the current adjusted weights, the score is "+avg.toFixed(2)+"/10 ("+rating(avg).toLowerCase()+" distance).",
+""
+);
+
+if(Math.abs(avg-baseAvg)<0.001){
+lines.push(
+"No meaningful alternative weighting has been tested yet. Adjust the sliders to evaluate how different industry assumptions affect the recommendation."
+);
+}else{
+lines.push(
+"The score "+(avg>baseAvg?"increases":"decreases")+" by "+Math.abs(avg-baseAvg).toFixed(2)+" points.",
+"",
+rating(avg)===rating(baseAvg)
+?"The overall distance classification remains unchanged, suggesting that the broad recommendation is relatively stable under this weighting scenario."
+:"The distance classification changes, suggesting that the recommended level of caution is sensitive to the assumptions about industry importance."
+);
+}
+
+lines.push(
+"",
+"LIMITATIONS",
+"",
+"This assessment is an illustrative screening tool rather than an investment forecast. Its linked references are source portals, not live data feeds, and the dimension ratings are provisional judgments rather than scores calculated directly from verified quantitative indicators.",
+"",
+"The tool cannot determine product-specific tariffs, customer demand, distribution feasibility, or the company's operational capabilities. Additional research would be required before deciding whether to enter the market."
+);
+
+if(total!==100){
+lines.push(
+"",
+"WARNING: The selected weights total "+total+"%. They have been normalized for calculation. For a defensible final report, adjust them to total 100%."
+);
+}
+
+return lines.join("\n");
+}
+
+function displayReport(text){
+const box=document.getElementById("reportText");
+box.textContent=text;
+box.style.whiteSpace="pre-line";
+
+document.getElementById("copyReport").onclick=async()=>{
+try{
+await navigator.clipboard.writeText(text);
+document.getElementById("copyStatus").textContent=
+"Full report copied! Paste it into Google Docs.";
+}catch(e){
+document.getElementById("copyStatus").textContent=
+"Copy was blocked. Select the report text and copy it manually.";
+}
+};
+}
+
+function render(){
+const home=document.getElementById("home").value;
+const target=document.getElementById("target").value;
+const ind=document.getElementById("industry").value;
+
+if(home===target){
+result.innerHTML="<h2>Results</h2><p>Choose two different countries.</p>";
+document.getElementById("reportText").textContent="Choose two different countries to generate a report.";
+return;
+}
+
+const total=weights.reduce((a,b)=>a+b,0);
+
+const avg=total?
+dimensions.reduce((a,d,i)=>a+d.score*weights[i],0)/total:0;
+
+const base=profiles[ind];
+
+const baseAvg=dimensions.reduce(
+(a,d,i)=>a+d.score*base[i],0
+)/100;
+
+const highest=dimensions.reduce(
+(a,d,i)=>d.score*weights[i]>dimensions[a].score*weights[a]?i:a,0
+);
+
+const homeName=home==="US"?"United States":"Japan";
+const targetName=target==="US"?"United States":"Japan";
+
+result.innerHTML=`
+<h2>Analysis: ${homeName} → ${targetName}</h2>
+<p><strong>Industry:</strong>
+${document.getElementById("industry").selectedOptions[0].text}</p>
+<p><strong>Weighted CAGE distance:</strong>
+<span class="pill">${avg.toFixed(2)}/10 — ${rating(avg)}</span></p>
+<p><strong>Industry rationale:</strong> ${industryReason(ind)}</p>
+
+${dimensions.map((d,i)=>`
+<article>
+<h3>${d.name}: ${d.score}/10</h3>
+<p>${d.reason}</p>
+<p><strong>Country-level references:</strong>
+${sources[d.key].map(s=>`
+<a href="${s[1]}" target="_blank" rel="noopener">${s[0]}</a>
+`).join(" · ")}
+</p>
+<label for="w${i}">
+${d.name} weight:
+<output>${weights[i]}%</output>
+</label>
+<input id="w${i}" type="range" min="0" max="100" step="5" value="${weights[i]}">
+</article>
+`).join("")}
+
+<p><strong>Weights total:</strong> ${total}%</p>
+<p><strong>Recommendation:</strong> ${recommendation(avg)}</p>
+<p><strong>Single largest weighted risk:</strong>
+${dimensions[highest].name} distance.</p>
+<p><strong>Sensitivity:</strong>
+Default score ${baseAvg.toFixed(2)}/10.
+Adjusted score ${avg.toFixed(2)}/10.</p>
+<button id="reset">Reset industry weights</button>
+<p class="muted">Ratings are provisional. Sources are reference portals rather than live data feeds.</p>
+`;
+
+dimensions.forEach((d,i)=>{
+document.getElementById("w"+i).addEventListener("input",e=>{
+weights[i]=Number(e.target.value);
+render();
+});
+});
+
+document.getElementById("reset").onclick=()=>{
+weights=[...profiles[ind]];
+render();
+};
+
+displayReport(generateReport(
+home,target,ind,avg,baseAvg,highest,total
+));
+}
+
+document.getElementById("run").onclick=()=>{
+weights=[...profiles[document.getElementById("industry").value]];
+render();
+};
+
+render();
+</script>
+</body>
+</html>
