@@ -1,231 +1,458 @@
 
-function updateAnalysis() {
-  const home = document.getElementById("home").value;
-  const target = document.getElementById("target").value;
-  const ind = document.getElementById("industry").value;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAGE Distance Framework</title>
+<style>
+body{font:16px system-ui;margin:0;background:#f5f7fa;color:#172334}
+main{max-width:960px;margin:auto;padding:30px}
+section{background:white;border:1px solid #dce2e8;border-radius:12px;padding:20px;margin:16px 0}
+label{display:block;font-weight:650;margin:12px 0 5px}
+select,input{width:100%;padding:10px;box-sizing:border-box;font:inherit}
+input[type=number]{max-width:160px;border:1px solid #aab7c5;border-radius:7px}
+button{background:#154c78;color:white;border:0;border-radius:8px;padding:12px 18px;cursor:pointer}
+button:hover:not(:disabled){background:#0b3455}
+button:disabled{opacity:.45;cursor:not-allowed}
+small,.muted{color:#526171}
+a{color:#115d99}
+h1{margin-bottom:4px}
+.pill{padding:4px 9px;border-radius:30px;background:#eaf2fb}
+.report{background:#f9fbff;border:1px solid #cbdbea;border-radius:10px;padding:20px;line-height:1.65;white-space:pre-line}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.notice{font-size:14px;color:#526171}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+article{border-bottom:1px solid #e2e7ed;padding:12px 0}
+.warning{background:#fff1f0;color:#a32323;border:1px solid #e4a4a4;border-radius:8px;padding:12px;margin:12px 0;font-weight:600}
+.success{background:#e9f7ef;color:#176b42;border:1px solid #9ed2b2;border-radius:8px;padding:12px;margin:12px 0;font-weight:600}
+.error-input{border:2px solid #c52d2d!important}
+</style>
+</head>
+<body>
+<main>
+<h1>CAGE Distance Framework</h1>
+<p class="muted">Illustrative country-pair assessment. Distance scores are decision aids, not forecasts.</p>
 
-  if (home === target) {
-    result.innerHTML =
-      "<h2>Results</h2><p>Choose two different countries.</p>";
-    reportBox.textContent = "Choose two different countries.";
-    copyButton.disabled = true;
-    return;
-  }
+<section>
+<div class="grid">
+<div>
+<label for="home">Home country</label>
+<select id="home">
+<option value="US">United States</option>
+<option value="JP">Japan</option>
+</select>
+</div>
+<div>
+<label for="target">Target country</label>
+<select id="target">
+<option value="JP">Japan</option>
+<option value="US">United States</option>
+</select>
+</div>
+<div>
+<label for="industry">Industry</label>
+<select id="industry">
+<option value="consumer">Consumer products</option>
+<option value="media">Media and entertainment</option>
+<option value="cement">Cement and construction materials</option>
+</select>
+</div>
+</div>
+<p><button id="run">Analyze countries</button></p>
+<small>Current coverage: United States and Japan only.</small>
+</section>
 
-  const homeName = home === "US" ? "United States" : "Japan";
-  const targetName = target === "US" ? "United States" : "Japan";
+<section id="results" aria-live="polite"></section>
 
-  // All four weights are now grouped together.
-  const weightInputs = dimensions.map((d, i) => `
-    <div>
-      <label for="w${i}">${d.name} (%)</label>
-      <input
-        id="w${i}"
-        type="number"
-        min="0"
-        max="100"
-        step="any"
-        value="${Number.isFinite(weights[i]) ? weights[i] : ""}"
-      >
-    </div>
-  `).join("");
+<section>
+<h2>Copy-ready CAGE Analysis Report</h2>
+<p class="muted">The report updates automatically when valid weights are entered. Copy it into Google Docs for your assignment.</p>
+<div class="actions">
+<button id="copyReport" type="button">Copy Full Report</button>
+</div>
+<p id="copyStatus" class="notice" role="status"></p>
+<div id="reportText" class="report"></div>
+</section>
 
-  // The original explanations and references stay below.
-  const dimensionDetails = dimensions.map((d, i) => `
-    <article>
-      <h3>${d.name}: ${d.score}/10</h3>
-      <p>${d.reason}</p>
-      <p><strong>Industry weight applied:</strong>
-        <span id="applied${i}">${weights[i]}%</span>
-      </p>
-      <p><strong>Country-level references:</strong>
-        ${sources[d.key].map(s => `
-          <a href="${s[1]}" target="_blank" rel="noopener">
-            ${s[0]}
-          </a>
-        `).join(" · ")}
-      </p>
-    </article>
-  `).join("");
+<section>
+<h2>Method and limitations</h2>
+<p>Each dimension receives a judgment-based rating from 0 to 10, where 0 represents minimal distance and 10 represents extreme distance. Industry-specific weights must total exactly 100%.</p>
+<p>The weighted average is a screening heuristic, not a validated prediction of expansion success. Ratings are provisional and should be checked against current country data before investment decisions.</p>
+<p>The tool does not evaluate firm capabilities, product-specific regulations, tariffs, or actual consumer demand.</p>
+</section>
+</main>
 
-  result.innerHTML = `
-    <h2>Analysis: ${homeName} → ${targetName}</h2>
+<script>
+const sources={
+culture:[
+["The Culture Factor country comparison",
+"https://www.theculturefactor.com/country-comparison-tool"]
+],
+admin:[
+["U.S. Trade Representative — Japan",
+"https://ustr.gov/countries-regions/japan-korea-apec/japan"],
+["WTO trade agreements database",
+"https://rtais.wto.org/"]
+],
+geo:[
+["CEPII GeoDist database",
+"https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=6"],
+["World Bank Logistics Performance Index",
+"https://lpi.worldbank.org/"]
+],
+econ:[
+["World Bank GDP per capita",
+"https://data.worldbank.org/indicator/NY.GDP.PCAP.CD?locations=US-JP"]
+]
+};
 
-    <p><strong>Industry:</strong>
-      ${document.getElementById("industry").selectedOptions[0].text}
-    </p>
+const dimensions=[
+{
+name:"Cultural",
+key:"culture",
+score:7,
+reason:"English and Japanese are distinct languages, and cross-cultural communication norms differ. These differences can complicate marketing, product positioning, and customer relationships. The rating is an analyst judgment, not a direct Hofstede measurement."
+},
+{
+name:"Administrative",
+key:"admin",
+score:3,
+reason:"The United States and Japan have established diplomatic and commercial ties. However, there is no comprehensive bilateral free-trade agreement covering all goods. Product-specific regulations and trade measures require additional investigation."
+},
+{
+name:"Geographic",
+key:"geo",
+score:8,
+reason:"The countries are separated by the Pacific Ocean and do not share a land border. International transportation, shipping times, and supply-chain reliability create challenges for businesses distributing physical products."
+},
+{
+name:"Economic",
+key:"econ",
+score:4,
+reason:"Both countries are high-income economies, but GDP per capita, purchasing patterns, and consumer preferences differ. National averages do not establish affordability for a specific customer segment."
+}
+];
 
-    <p><strong>Industry rationale:</strong>
-      ${industryReason(ind)}
-    </p>
+const profiles={
+consumer:[30,20,20,30],
+media:[45,25,10,20],
+cement:[10,20,45,25]
+};
 
-    <div class="weight-panel">
-      <h3>Adjust CAGE Dimension Weights</h3>
+let weights=[...profiles.consumer];
 
-      <p>
-        Enter the importance of each dimension.
-        All four weights must total exactly 100%.
-      </p>
+const result=document.getElementById("results");
+const reportBox=document.getElementById("reportText");
+const copyButton=document.getElementById("copyReport");
 
-      <div class="weight-grid">
-        ${weightInputs}
-      </div>
-
-      <p id="weightStatus" role="status" aria-live="polite"></p>
-
-      <div class="weight-actions">
-        <button id="recalculate" type="button">
-          Recalculate Analysis
-        </button>
-
-        <button id="reset" type="button">
-          Reset Industry Weights
-        </button>
-      </div>
-    </div>
-
-    <div id="summary"></div>
-
-    <h2>Four CAGE Dimensions</h2>
-    <div id="rows">
-      ${dimensionDetails}
-    </div>
-
-    <p class="muted">
-      Ratings are provisional. Sources are reference
-      portals rather than live data feeds.
-    </p>
-  `;
-
-  // Typing changes the draft weights, not the report.
-  dimensions.forEach((d, i) => {
-    document.getElementById("w" + i)
-      .addEventListener("input", e => {
-        const raw = e.target.value.trim();
-        weights[i] = raw === "" ? NaN : Number(raw);
-        validateWeightInputs();
-      });
-  });
-
-  // Recalculate only when all weights are valid.
-  document.getElementById("recalculate").onclick = () => {
-    if (validWeights()) {
-      updateSummary();
-    }
-  };
-
-  // Restore the original industry-specific weights.
-  document.getElementById("reset").onclick = () => {
-    weights = [...profiles[ind]];
-    updateAnalysis();
-  };
-
-  validateWeightInputs();
-  updateSummary();
+function weightTotal(){
+return weights.reduce((a,b)=>a+b,0);
 }
 
-function validateWeightInputs() {
-  const total = weightTotal();
-  const valid = validWeights();
-  const status = document.getElementById("weightStatus");
-  const button = document.getElementById("recalculate");
-
-  if (!status || !button) return;
-
-  button.disabled = !valid;
-
-  if (!valid) {
-    status.className = "weight-warning";
-
-    if (weights.some(w => !Number.isFinite(w))) {
-      status.textContent =
-        "⚠ Enter a valid number for every dimension.";
-    } else if (weights.some(w => w < 0 || w > 100)) {
-      status.textContent =
-        "⚠ Each weight must be between 0% and 100%.";
-    } else {
-      status.textContent =
-        "⚠ Total: " + total.toFixed(2) +
-        "%. Weights must equal 100%.";
-    }
-
-    copyButton.disabled = true;
-    reportBox.textContent =
-      "Report unavailable until valid weights are recalculated.";
-
-    document.getElementById("summary").innerHTML =
-      "<p>Adjust the weights and click Recalculate Analysis.</p>";
-  } else {
-    status.className = "weight-valid";
-    status.textContent =
-      "✓ Total: 100%. Ready to recalculate.";
-
-    // Do not calculate until the button is clicked.
-    copyButton.disabled = true;
-    reportBox.textContent =
-      "Weights are ready. Click Recalculate Analysis to update the report.";
-
-    document.getElementById("summary").innerHTML =
-      "<p>Click Recalculate Analysis to apply your weights.</p>";
-  }
+function validWeights(){
+return weights.every(w=>Number.isFinite(w)&&w>=0&&w<=100)
+&&Math.abs(weightTotal()-100)<0.000001;
 }
 
-function updateSummary() {
-  if (!validWeights()) {
-    validateWeightInputs();
-    return;
-  }
-
-  const home = document.getElementById("home").value;
-  const target = document.getElementById("target").value;
-  const ind = document.getElementById("industry").value;
-
-  const avg = dimensions.reduce(
-    (sum, d, i) => sum + d.score * weights[i], 0
-  ) / 100;
-
-  const base = profiles[ind];
-
-  const baseAvg = dimensions.reduce(
-    (sum, d, i) => sum + d.score * base[i], 0
-  ) / 100;
-
-  const highest = dimensions.reduce(
-    (best, d, i) =>
-      d.score * weights[i] >
-      dimensions[best].score * weights[best]
-        ? i
-        : best,
-    0
-  );
-
-  const summary = document.getElementById("summary");
-
-  summary.innerHTML = `
-    <h3>Weighted CAGE Distance:
-      ${avg.toFixed(2)}/10 — ${rating(avg)}
-    </h3>
-
-    <p><strong>Recommendation:</strong>
-      ${recommendation(avg)}
-    </p>
-
-    <p><strong>Single largest weighted risk:</strong>
-      ${dimensions[highest].name} distance.
-    </p>
-
-    <p><strong>Sensitivity analysis:</strong>
-      Default score: ${baseAvg.toFixed(2)}/10.
-      Adjusted score: ${avg.toFixed(2)}/10.
-    </p>
-  `;
-
-  dimensions.forEach((d, i) => {
-    const applied = document.getElementById("applied" + i);
-    if (applied) applied.textContent = weights[i] + "%";
-  });
-
-  displayReport(
-    generateReport(home, target, ind, avg, baseAvg, highest)
-  );
+function rating(score){
+if(score<3.5)return "Relatively low";
+if(score<6.5)return "Moderate";
+return "High";
 }
+
+function recommendation(score){
+if(score>=6.5){
+return "Proceed only after substantial local-market validation and risk mitigation.";
+}
+if(score>=3.5){
+return "Conduct a staged market test before committing major resources.";
+}
+return "Country distance alone does not suggest a major obstacle, but validate demand and compliance before entering.";
+}
+
+function industryReason(ind){
+if(ind==="media"){
+return "Cultural and administrative compatibility receive greater weight because media content must be localized and distribution may face regulation.";
+}
+if(ind==="cement"){
+return "Geographic distance receives the greatest weight because heavy construction materials are costly to transport.";
+}
+return "Cultural and economic distance receive the greatest weight because consumer acceptance and purchasing power are central to sales.";
+}
+
+function generateReport(home,target,ind,avg,baseAvg,highest){
+const homeName=home==="US"?"United States":"Japan";
+const targetName=target==="US"?"United States":"Japan";
+const industry=document.getElementById("industry").selectedOptions[0].text;
+
+const contributions=dimensions.map((d,i)=>({
+...d,
+weight:weights[i],
+points:d.score*weights[i]/100
+}));
+
+const risk=contributions[highest];
+
+const lines=[
+"CAGE DISTANCE ANALYSIS REPORT",
+"",
+"Country pair: "+homeName+" to "+targetName,
+"Industry: "+industry,
+"",
+"EXECUTIVE SUMMARY",
+"",
+"The "+homeName+" to "+targetName+" comparison receives an illustrative weighted CAGE distance score of "+avg.toFixed(2)+"/10, indicating "+rating(avg).toLowerCase()+" distance for the "+industry.toLowerCase()+" industry.",
+"",
+"The scores represent analyst judgments informed by country-level reference sources rather than measured probabilities of business success.",
+"",
+"INDUSTRY WEIGHTING AND METHODOLOGY",
+"",
+industryReason(ind),
+"",
+"The default weights are: "+dimensions.map((d,i)=>d.name+" "+profiles[ind][i]+"%").join(", ")+".",
+"",
+"The current weights are: "+dimensions.map((d,i)=>d.name+" "+weights[i]+"%").join(", ")+".",
+"",
+"All weights total 100%. Each dimension receives a distance score from 0 to 10. The overall score is calculated by multiplying each dimension's rating by its weight and summing the contributions.",
+"",
+"FOUR CAGE DIMENSIONS",
+""
+];
+
+contributions.forEach(d=>{
+lines.push(
+d.name.toUpperCase()+" DISTANCE",
+"",
+"Distance score: "+d.score+"/10",
+"Industry weight: "+d.weight+"%",
+"Weighted contribution: "+d.points.toFixed(2)+" points",
+"",
+"Analysis: "+d.reason,
+"",
+"Country-level references:",
+...sources[d.key].map(s=>s[0]+": "+s[1]),
+""
+);
+});
+
+lines.push(
+"RECOMMENDATION",
+"",
+recommendation(avg),
+"",
+"The firm should validate the most important barriers through local market research, consumer testing, and regulatory due diligence before making a major investment.",
+"",
+"SINGLE LARGEST RISK",
+"",
+"The largest weighted distance contribution is "+risk.name.toLowerCase()+" distance, contributing "+risk.points.toFixed(2)+" points to the overall score.",
+"",
+"Leadership should prioritize investigating this risk before committing substantial resources. The ranking reflects the current industry weights rather than a quantified financial loss.",
+"",
+"WEIGHT SENSITIVITY ANALYSIS",
+"",
+"Under the default industry weights, the overall CAGE score is "+baseAvg.toFixed(2)+"/10 ("+rating(baseAvg).toLowerCase()+" distance).",
+"",
+"Under the current adjusted weights, the score is "+avg.toFixed(2)+"/10 ("+rating(avg).toLowerCase()+" distance).",
+""
+);
+
+if(Math.abs(avg-baseAvg)<0.001){
+lines.push(
+"No meaningful change in the overall score is observed. Test alternative weights to demonstrate sensitivity."
+);
+}else{
+lines.push(
+"The score "+(avg>baseAvg?"increases":"decreases")+" by "+Math.abs(avg-baseAvg).toFixed(2)+" points.",
+"",
+rating(avg)===rating(baseAvg)
+?"The overall distance classification remains unchanged, suggesting that the broad recommendation is relatively stable under this weighting scenario."
+:"The distance classification changes, suggesting that the recommended level of caution is sensitive to the assumptions about industry importance."
+);
+}
+
+lines.push(
+"",
+"LIMITATIONS",
+"",
+"This assessment is an illustrative screening tool rather than an investment forecast. Its linked references are source portals, not live data feeds, and the dimension ratings are provisional judgments rather than scores calculated directly from verified quantitative indicators.",
+"",
+"The tool cannot determine product-specific tariffs, customer demand, distribution feasibility, or the company's operational capabilities. Additional research would be required before deciding whether to enter the market."
+);
+
+return lines.join("\n");
+}
+
+function displayReport(text){
+reportBox.textContent=text;
+copyButton.disabled=false;
+document.getElementById("copyStatus").textContent="";
+}
+
+copyButton.addEventListener("click",async()=>{
+if(!validWeights())return;
+try{
+await navigator.clipboard.writeText(reportBox.textContent);
+document.getElementById("copyStatus").textContent=
+"Full report copied! Paste it into Google Docs.";
+}catch(e){
+document.getElementById("copyStatus").textContent=
+"Copy was blocked. Select the report text and copy it manually.";
+}
+});
+
+function updateAnalysis(){
+const home=document.getElementById("home").value;
+const target=document.getElementById("target").value;
+const ind=document.getElementById("industry").value;
+
+if(home===target){
+result.innerHTML="<h2>Results</h2><p>Choose two different countries.</p>";
+reportBox.textContent="Choose two different countries.";
+copyButton.disabled=true;
+return;
+}
+
+const total=weightTotal();
+const valid=validWeights();
+
+const inputs=dimensions.map((d,i)=>`
+<article>
+<h3>${d.name}: ${d.score}/10</h3>
+<p>${d.reason}</p>
+<p><strong>Country-level references:</strong>
+${sources[d.key].map(s=>`
+<a href="${s[1]}" target="_blank" rel="noopener">${s[0]}</a>
+`).join(" · ")}
+</p>
+<label for="w${i}">${d.name} weight (%)</label>
+<input
+id="w${i}"
+type="number"
+min="0"
+max="100"
+step="any"
+value="${Number.isFinite(weights[i])?weights[i]:""}"
+class="${valid?"":"error-input"}"
+>
+</article>
+`).join("");
+
+result.innerHTML=`
+<h2>Analysis: ${home==="US"?"United States":"Japan"} → ${target==="US"?"United States":"Japan"}</h2>
+<p><strong>Industry:</strong>
+${document.getElementById("industry").selectedOptions[0].text}</p>
+<p><strong>Industry rationale:</strong> ${industryReason(ind)}</p>
+
+<h3>Dimension scores and weights</h3>
+<p>Enter the percentage weight for each dimension. The four weights must total 100%.</p>
+
+<div id="rows">${inputs}</div>
+
+<div id="weightStatus" role="status" aria-live="polite"></div>
+<div id="summary"></div>
+
+<button id="reset" type="button">Reset industry weights</button>
+<p class="muted">Ratings are provisional. Sources are reference portals rather than live data feeds.</p>
+`;
+
+dimensions.forEach((d,i)=>{
+document.getElementById("w"+i).addEventListener("input",e=>{
+const raw=e.target.value;
+weights[i]=raw.trim()===""?NaN:Number(raw);
+updateSummary();
+});
+});
+
+document.getElementById("reset").onclick=()=>{
+weights=[...profiles[ind]];
+updateAnalysis();
+};
+
+updateSummary();
+}
+
+function updateSummary(){
+const home=document.getElementById("home").value;
+const target=document.getElementById("target").value;
+const ind=document.getElementById("industry").value;
+
+const total=weightTotal();
+const valid=validWeights();
+const status=document.getElementById("weightStatus");
+const summary=document.getElementById("summary");
+
+dimensions.forEach((d,i)=>{
+const el=document.getElementById("w"+i);
+if(el){
+el.classList.toggle("error-input",!valid);
+}
+});
+
+if(!valid){
+let message;
+
+if(weights.some(w=>!Number.isFinite(w))){
+message="Please enter a valid number for every weight.";
+}else if(weights.some(w=>w<0||w>100)){
+message="Each weight must be between 0% and 100%.";
+}else{
+const difference=100-total;
+message="Weights must equal 100%. "+
+(difference>0
+?"Add "+difference.toFixed(2)+" percentage points."
+:"Remove "+Math.abs(difference).toFixed(2)+" percentage points.");
+}
+
+status.className="warning";
+status.textContent="⚠ "+message+" Current total: "+
+(Number.isFinite(total)?total.toFixed(2)+"%":"Invalid");
+
+summary.innerHTML="<p>Correct the weights to calculate the final score and recommendation.</p>";
+
+reportBox.textContent="Report unavailable: Please adjust the dimension weights so they total exactly 100%.";
+copyButton.disabled=true;
+document.getElementById("copyStatus").textContent="";
+return;
+}
+
+status.className="success";
+status.textContent="✓ Weights total 100%. Analysis is ready.";
+
+const avg=dimensions.reduce(
+(a,d,i)=>a+d.score*weights[i],0
+)/100;
+
+const base=profiles[ind];
+const baseAvg=dimensions.reduce(
+(a,d,i)=>a+d.score*base[i],0
+)/100;
+
+const highest=dimensions.reduce(
+(a,d,i)=>d.score*weights[i]>dimensions[a].score*weights[a]?i:a,0
+);
+
+summary.innerHTML=`
+<h3>Weighted CAGE distance: ${avg.toFixed(2)}/10 — ${rating(avg)}</h3>
+<p><strong>Recommendation:</strong> ${recommendation(avg)}</p>
+<p><strong>Single largest weighted risk:</strong>
+${dimensions[highest].name} distance.</p>
+<p><strong>Sensitivity:</strong>
+Default score ${baseAvg.toFixed(2)}/10.
+Adjusted score ${avg.toFixed(2)}/10.</p>
+`;
+
+displayReport(generateReport(
+home,target,ind,avg,baseAvg,highest
+));
+}
+
+document.getElementById("run").onclick=()=>{
+weights=[...profiles[document.getElementById("industry").value]];
+updateAnalysis();
+};
+
+updateAnalysis();
+</script>
+</body>
+</html>
