@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,6 +26,12 @@ article{border-bottom:1px solid #e2e7ed;padding:12px 0}
 .warning{background:#fff1f0;color:#a32323;border:1px solid #e4a4a4;border-radius:8px;padding:12px;margin:12px 0;font-weight:600}
 .success{background:#e9f7ef;color:#176b42;border:1px solid #9ed2b2;border-radius:8px;padding:12px;margin:12px 0;font-weight:600}
 .error-input{border:2px solid #c52d2d!important}
+/* Compact, grouped weight controls */
+.weight-panel{background:#f0f5fa;border:1px solid #cbdbea;border-radius:10px;padding:18px;margin:20px 0}
+.weight-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.weight-grid input{width:100%;max-width:100%;background:white}
+.weight-actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+@media(max-width:650px){.weight-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -302,149 +307,108 @@ document.getElementById("copyStatus").textContent=
 });
 
 function updateAnalysis(){
-const home=document.getElementById("home").value;
-const target=document.getElementById("target").value;
-const ind=document.getElementById("industry").value;
-
-if(home===target){
-result.innerHTML="<h2>Results</h2><p>Choose two different countries.</p>";
-reportBox.textContent="Choose two different countries.";
-copyButton.disabled=true;
-return;
+ const home=document.getElementById("home").value;
+ const target=document.getElementById("target").value;
+ const ind=document.getElementById("industry").value;
+ if(home===target){
+   result.innerHTML="<h2>Results</h2><p>Choose two different countries.</p>";
+   reportBox.textContent="Choose two different countries.";
+   copyButton.disabled=true;
+   return;
+ }
+ const inputs=dimensions.map((d,i)=>`
+   <div><label for="w${i}">${d.name} (%)</label>
+   <input id="w${i}" type="number" min="0" max="100" step="any"
+   value="${Number.isFinite(weights[i])?weights[i]:""}"></div>
+ `).join("");
+ const details=dimensions.map((d,i)=>`
+   <article><h3>${d.name}: ${d.score}/10</h3>
+   <p>${d.reason}</p>
+   <p><strong>Industry weight applied:</strong> <span id="applied${i}">${weights[i]}%</span></p>
+   <p><strong>Country-level references:</strong>
+   ${sources[d.key].map(s=>`<a href="${s[1]}" target="_blank" rel="noopener">${s[0]}</a>`).join(" · ")}</p></article>
+ `).join("");
+ result.innerHTML=`
+   <h2>Analysis: ${home==="US"?"United States":"Japan"} → ${target==="US"?"United States":"Japan"}</h2>
+   <p><strong>Industry:</strong> ${document.getElementById("industry").selectedOptions[0].text}</p>
+   <p><strong>Industry rationale:</strong> ${industryReason(ind)}</p>
+   <div class="weight-panel">
+     <h3>Adjust CAGE Dimension Weights</h3>
+     <p>Enter all four weights. They must total 100% before recalculating.</p>
+     <div class="weight-grid">${inputs}</div>
+     <div id="weightStatus" role="status" aria-live="polite"></div>
+     <div class="weight-actions">
+       <button id="recalculate" type="button">Recalculate Analysis</button>
+       <button id="reset" type="button">Reset Industry Weights</button>
+     </div>
+   </div>
+   <div id="summary"></div>
+   <h2>Four CAGE Dimensions</h2>
+   ${details}
+   <p class="muted">Ratings are provisional. Sources are reference portals rather than live data feeds.</p>`;
+ dimensions.forEach((d,i)=>{
+   document.getElementById("w"+i).addEventListener("input",e=>{
+     const raw=e.target.value.trim();
+     weights[i]=raw===""?NaN:Number(raw);
+     validateWeightInputs();
+   });
+ });
+ document.getElementById("recalculate").onclick=()=>{
+   if(validWeights())updateSummary();
+ };
+ document.getElementById("reset").onclick=()=>{
+   weights=[...profiles[ind]];
+   updateAnalysis();
+ };
+ updateSummary();
 }
 
-const total=weightTotal();
-const valid=validWeights();
-
-const inputs=dimensions.map((d,i)=>`
-<article>
-<h3>${d.name}: ${d.score}/10</h3>
-<p>${d.reason}</p>
-<p><strong>Country-level references:</strong>
-${sources[d.key].map(s=>`
-<a href="${s[1]}" target="_blank" rel="noopener">${s[0]}</a>
-`).join(" · ")}
-</p>
-<label for="w${i}">${d.name} weight (%)</label>
-<input
-id="w${i}"
-type="number"
-min="0"
-max="100"
-step="any"
-value="${Number.isFinite(weights[i])?weights[i]:""}"
-class="${valid?"":"error-input"}"
->
-</article>
-`).join("");
-
-result.innerHTML=`
-<h2>Analysis: ${home==="US"?"United States":"Japan"} → ${target==="US"?"United States":"Japan"}</h2>
-<p><strong>Industry:</strong>
-${document.getElementById("industry").selectedOptions[0].text}</p>
-<p><strong>Industry rationale:</strong> ${industryReason(ind)}</p>
-
-<h3>Dimension scores and weights</h3>
-<p>Enter the percentage weight for each dimension. The four weights must total 100%.</p>
-
-<div id="rows">${inputs}</div>
-
-<div id="weightStatus" role="status" aria-live="polite"></div>
-<div id="summary"></div>
-
-<button id="reset" type="button">Reset industry weights</button>
-<p class="muted">Ratings are provisional. Sources are reference portals rather than live data feeds.</p>
-`;
-
-dimensions.forEach((d,i)=>{
-document.getElementById("w"+i).addEventListener("input",e=>{
-const raw=e.target.value;
-weights[i]=raw.trim()===""?NaN:Number(raw);
-updateSummary();
-});
-});
-
-document.getElementById("reset").onclick=()=>{
-weights=[...profiles[ind]];
-updateAnalysis();
-};
-
-updateSummary();
+function validateWeightInputs(){
+ const total=weightTotal();
+ const valid=validWeights();
+ const status=document.getElementById("weightStatus");
+ document.getElementById("recalculate").disabled=!valid;
+ if(valid){
+   status.className="success";
+   status.textContent="✓ Weights total 100%. Click Recalculate Analysis to apply changes.";
+ }else{
+   let message;
+   if(weights.some(w=>!Number.isFinite(w)))message="Enter a number for each weight.";
+   else if(weights.some(w=>w<0||w>100))message="Each weight must be between 0% and 100%.";
+   else message="Weights total "+total.toFixed(2)+"%. They must total 100%.";
+   status.className="warning";
+   status.textContent="⚠ "+message;
+ }
+ dimensions.forEach((d,i)=>document.getElementById("w"+i).classList.toggle("error-input",!valid));
+ // Never let the user copy a report calculated from old weights.
+ copyButton.disabled=true;
+ reportBox.textContent="Weights changed. Click Recalculate Analysis after the total reaches 100%.";
+ document.getElementById("copyStatus").textContent="";
+ document.getElementById("summary").innerHTML="<p>Click Recalculate Analysis to update the score and report.</p>";
 }
 
 function updateSummary(){
-const home=document.getElementById("home").value;
-const target=document.getElementById("target").value;
-const ind=document.getElementById("industry").value;
-
-const total=weightTotal();
-const valid=validWeights();
-const status=document.getElementById("weightStatus");
-const summary=document.getElementById("summary");
-
-dimensions.forEach((d,i)=>{
-const el=document.getElementById("w"+i);
-if(el){
-el.classList.toggle("error-input",!valid);
-}
-});
-
-if(!valid){
-let message;
-
-if(weights.some(w=>!Number.isFinite(w))){
-message="Please enter a valid number for every weight.";
-}else if(weights.some(w=>w<0||w>100)){
-message="Each weight must be between 0% and 100%.";
-}else{
-const difference=100-total;
-message="Weights must equal 100%. "+
-(difference>0
-?"Add "+difference.toFixed(2)+" percentage points."
-:"Remove "+Math.abs(difference).toFixed(2)+" percentage points.");
-}
-
-status.className="warning";
-status.textContent="⚠ "+message+" Current total: "+
-(Number.isFinite(total)?total.toFixed(2)+"%":"Invalid");
-
-summary.innerHTML="<p>Correct the weights to calculate the final score and recommendation.</p>";
-
-reportBox.textContent="Report unavailable: Please adjust the dimension weights so they total exactly 100%.";
-copyButton.disabled=true;
-document.getElementById("copyStatus").textContent="";
-return;
-}
-
-status.className="success";
-status.textContent="✓ Weights total 100%. Analysis is ready.";
-
-const avg=dimensions.reduce(
-(a,d,i)=>a+d.score*weights[i],0
-)/100;
-
-const base=profiles[ind];
-const baseAvg=dimensions.reduce(
-(a,d,i)=>a+d.score*base[i],0
-)/100;
-
-const highest=dimensions.reduce(
-(a,d,i)=>d.score*weights[i]>dimensions[a].score*weights[a]?i:a,0
-);
-
-summary.innerHTML=`
-<h3>Weighted CAGE distance: ${avg.toFixed(2)}/10 — ${rating(avg)}</h3>
-<p><strong>Recommendation:</strong> ${recommendation(avg)}</p>
-<p><strong>Single largest weighted risk:</strong>
-${dimensions[highest].name} distance.</p>
-<p><strong>Sensitivity:</strong>
-Default score ${baseAvg.toFixed(2)}/10.
-Adjusted score ${avg.toFixed(2)}/10.</p>
-`;
-
-displayReport(generateReport(
-home,target,ind,avg,baseAvg,highest
-));
+ if(!validWeights()){
+   validateWeightInputs();
+   return;
+ }
+ const home=document.getElementById("home").value;
+ const target=document.getElementById("target").value;
+ const ind=document.getElementById("industry").value;
+ const avg=dimensions.reduce((a,d,i)=>a+d.score*weights[i],0)/100;
+ const base=profiles[ind];
+ const baseAvg=dimensions.reduce((a,d,i)=>a+d.score*base[i],0)/100;
+ const highest=dimensions.reduce((a,d,i)=>d.score*weights[i]>dimensions[a].score*weights[a]?i:a,0);
+ document.getElementById("summary").innerHTML=`
+ <h3>Weighted CAGE distance: ${avg.toFixed(2)}/10 — ${rating(avg)}</h3>
+ <p><strong>Recommendation:</strong> ${recommendation(avg)}</p>
+ <p><strong>Single largest weighted risk:</strong> ${dimensions[highest].name} distance.</p>
+ <p><strong>Sensitivity:</strong> Default score ${baseAvg.toFixed(2)}/10. Adjusted score ${avg.toFixed(2)}/10.</p>`;
+ dimensions.forEach((d,i)=>document.getElementById("applied"+i).textContent=weights[i]+"%");
+ const status=document.getElementById("weightStatus");
+ status.className="success";
+ status.textContent="✓ Weights total 100%. Analysis updated.";
+ displayReport(generateReport(home,target,ind,avg,baseAvg,highest));
 }
 
 document.getElementById("run").onclick=()=>{
